@@ -1,168 +1,132 @@
+<!-- START OF FILE index.html -->
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>高级引文分析平台</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com"> 
-    <link rel="preconnect" href="https://fonts.gstatic.com"  crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>高级引文分析平台 - 工具</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="main-container">
-        <header>
-            <h1>高级引文分析平台</h1>
-            <p class="subtitle">由 Scopus (Elsevier) API 驱动</p>
-        </header>
-        
-        <nav class="tab-navigation">
-            <button class="tab-button active" data-target="author-pane">查教授引用</button>
-            <button class="tab-button" data-target="journal-pane">查期刊互引</button>
-            <button class="tab-button" data-target="cited-by-pane">查文章被引</button>
-        </nav>
-        
-        <main class="tab-content">
-            <!-- 功能一：查教授引用 -->
-            <div class="tab-pane active" id="author-pane">
-                <div id="author-stage-1">
-                    <div class="form-card">
-                        <div class="step-indicator">第一步：查找作者</div>
-                        <p class="form-description">输入教授信息以精确定位。机构信息有助于区分同名作者。</p>
-                        
-                        <div class="form-group">
-                            <label for="author-lastname">姓 (Last Name) *</label>
-                            <input type="text" id="author-lastname" placeholder="例如: Kitchin">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="author-firstname">名 (First Name)</label>
-                            <input type="text" id="author-firstname" placeholder="例如: John R.">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="author-affiliation">机构 (Affiliation)</label>
-                            <input type="text" id="author-affiliation" placeholder="例如: Carnegie Mellon University">
-                        </div>
-                        
-                        <button class="btn-primary" id="find-author-btn">查找教授</button>
+    <div class="page-container tool-page">
+        <div class="tool-card">
+            <header class="tool-header">
+                <a href="/" class="back-link">← 返回主页</a>
+                <a href="/logout" class="logout-link">登出 ({{ session.user_email }})</a>
+            </header>
+            
+            <div class="tool-container">
+                <div class="database-selector">
+                    <label>选择数据库:</label>
+                    <div class="db-switch">
+                        <input type="radio" id="db-scopus" name="database" value="scopus" checked>
+                        <label for="db-scopus">Scopus</label>
+                        <input type="radio" id="db-openalex" name="database" value="openalex">
+                        <label for="db-openalex">OpenAlex</label>
                     </div>
                 </div>
+
+                <nav class="tabs">
+                    <button class="tab-button active" data-target="author-pane">查教授引用</button>
+                    <button class="tab-button" data-target="journal-pane">查期刊互引</button>
+                    <button class="tab-button" data-target="cited-by-pane">查文章被引</button>
+                </nav>
                 
-                <div id="author-stage-2" style="display: none;">
-                    <div class="form-card">
-                        <div class="step-indicator">第二步：选择作者</div>
-                        <p class="form-description">请从以下最匹配的作者中选择一位。</p>
-                        <div id="author-candidates-container"></div>
-                    </div>
-                </div>
-                
-                <div id="author-stage-3" style="display: none;">
-                    <div class="form-card">
-                        <div class="step-indicator">第三步：分析引用</div>
-                        <p class="form-description">分析 <strong id="selected-author-name"></strong> 发表的文章引用情况。</p>
-                        
-                        <div class="form-group">
-                            <label for="prof-target-journal">引用的目标期刊 *</label>
-                            <input type="text" id="prof-target-journal" placeholder="例如: Nature">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>文章发表年份范围 *</label>
-                            <div class="input-group">
-                                <input type="number" id="prof-start-year" value="2020">
-                                <span>到</span>
-                                <input type="number" id="prof-end-year" value="2024">
+                <main class="tab-content">
+                    <div class="tab-pane active" id="author-pane">
+                        <div id="author-stage-1">
+                            <div class="form-card">
+                                <h2>第一步：查找作者</h2>
+                                <p class="form-description">通过作者姓名或ORCID进行查找。</p>
+                                <div id="author-search-by-name-section" class="feature-section">
+                                    <div class="disabled-overlay"><p>功能受限，请切换至OpenAlex</p></div>
+                                    <div class="form-group">
+                                        <label for="author-search-query">作者姓名</label>
+                                        <input type="text" id="author-search-query" placeholder="例如: Geoffrey Hinton">
+                                    </div>
+                                    <button class="btn-primary" id="find-author-by-name-btn">按姓名查找</button>
+                                </div>
+                                <hr class="form-divider" data-text="或">
+                                <div id="author-search-by-orcid-section" class="feature-section">
+                                    <div class="disabled-overlay"><p>功能受限，请切换至OpenAlex</p></div>
+                                    <div class="form-group">
+                                        <label for="author-orcid">通过 ORCID 查找</label>
+                                        <input type="text" id="author-orcid" placeholder="例如: 0000-0002-1825-0097">
+                                    </div>
+                                    <button class="btn-primary" id="find-author-by-orcid-btn">按 ORCID 查找</button>
+                                </div>
                             </div>
                         </div>
-                        
-                        <button class="btn-primary" id="analyze-prof-citations-btn">开始分析</button>
-                        <button class="btn-secondary" id="back-to-author-search">返回重新搜索</button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 功能二：查期刊互引 -->
-            <div class="tab-pane" id="journal-pane">
-                <div class="form-card">
-                    <p class="form-description">检索一个或多个源期刊在特定时间内引用了目标期刊的文章。</p>
-                    
-                    <div class="form-group">
-                        <label for="source-journals">源期刊 (多个用英文逗号分隔) *</label>
-                        <input type="text" id="source-journals" placeholder="例如: Science, Cell">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="journal-target-journal">引用的目标期刊 *</label>
-                        <input type="text" id="journal-target-journal" placeholder="例如: Nature">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>文章发表年份范围 *</label>
-                        <div class="input-group">
-                            <input type="number" id="journal-start-year" value="2020">
-                            <span>到</span>
-                            <input type="number" id="journal-end-year" value="2024">
-                        </div>
-                    </div>
-                    
-                    <button class="btn-primary" id="search-journal-citations-btn">检索期刊互引</button>
-                </div>
-            </div>
-            
-            <!-- 功能三：查文章被引 -->
-            <div class="tab-pane" id="cited-by-pane">
-                <div id="cited-by-stage-1">
-                    <div class="form-card">
-                        <div class="step-indicator">第一步：查找文章</div>
-                        <p class="form-description">输入文章的标题、DOI或Scopus EID进行搜索。</p>
-                        
-                        <div class="form-group">
-                            <label for="article-identifier">文章标题、DOI 或 EID *</label>
-                            <input type="text" id="article-identifier" placeholder="例如: 10.1016/j.cell.2020.01.015 或 输入标题">
-                        </div>
-                        
-                        <button class="btn-primary" id="find-article-btn">查找文章</button>
-                    </div>
-                </div>
-                
-                <div id="cited-by-stage-2" style="display: none;">
-                    <div class="form-card">
-                        <div class="step-indicator">第二步：选择文章</div>
-                        <p class="form-description">请从以下最匹配的文章中选择一篇。</p>
-                        <div id="article-candidates-container"></div>
-                    </div>
-                </div>
-                
-                <div id="cited-by-stage-3" style="display: none;">
-                    <div class="form-card">
-                        <div class="step-indicator">第三步：分析被引情况</div>
-                        <p class="form-description">分析文章 "<strong id="selected-article-title"></strong>" 的被引情况。</p>
-                        
-                        <div class="form-group">
-                            <label>施引文献发表年份范围 *</label>
-                            <div class="input-group">
-                                <input type="number" id="cited-start-year" value="2020">
-                                <span>到</span>
-                                <input type="number" id="cited-end-year" value="2024">
+                        <div id="author-stage-2" style="display: none;">
+                            <div class="form-card">
+                                <h2>第二步：选择作者</h2>
+                                <p class="form-description">请从以下结果中选择正确的作者。</p>
+                                <div id="author-candidates-container"></div>
+                                <button class="btn-secondary" id="back-to-author-search-from-candidates">返回重新搜索</button>
                             </div>
                         </div>
-                        
-                        <p class="form-description small-text">将自动筛选来自核心外语期刊的引用。</p>
-                        
-                        <button class="btn-primary" id="search-cited-by-btn">开始分析</button>
-                        <button class="btn-secondary" id="back-to-article-search">返回重新搜索</button>
+                        <div id="author-stage-3" style="display: none;">
+                             <div class="form-card">
+                                <div id="selected-author-info-card"></div>
+                                <div id="author-works-container" style="margin-top: 2rem;"></div>
+                            </div>
+                            <button class="btn-secondary" id="back-to-author-search">重新查找作者</button>
+                        </div>
                     </div>
-                </div>
+                    
+                    <div class="tab-pane" id="journal-pane">
+                        <div class="form-card" id="journal-form-card">
+                            <h2>检索期刊互引</h2>
+                            <p class="form-description">检索源期刊在特定时间内引用了目标期刊的文章。</p>
+                            <div class="form-group">
+                                <div class="label-with-button">
+                                    <label for="source-journals">源期刊 (多个用英文逗号分隔) *</label>
+                                    <button class="btn-quick-fill" id="fill-core-journals">一键填充所有C刊</button>
+                                </div>
+                                <input type="text" id="source-journals" placeholder="点击下方按钮添加，或手动输入">
+                            </div>
+                            <div class="form-group" id="quick-add-container-source-journals"></div>
+                            <div class="form-group">
+                                <label for="journal-target-journal">引用的目标期刊 *</label>
+                                <input type="text" id="journal-target-journal" placeholder="点击下方按钮添加，或手动输入">
+                            </div>
+                            <div class="form-group" id="quick-add-container-target-journal"></div>
+                            <div class="form-group">
+                                <label>文章发表年份范围 *</label>
+                                <div class="input-group">
+                                    <input type="number" id="journal-start-year" value="2020">
+                                    <span>到</span>
+                                    <input type="number" id="journal-end-year" value="2024">
+                                </div>
+                            </div>
+                            <button class="btn-primary" id="search-journal-citations-btn">检索互引</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="cited-by-pane">
+                        <div id="cited-by-stage-1"><div class="form-card" id="article-form-card"><h2>第一步：查找文章</h2><p class="form-description">输入文章的标题或DOI。</p><div class="form-group"><label for="article-identifier">文章标题或DOI *</label><input type="text" id="article-identifier" placeholder="例如: 10.1016/j.cell.2020.01.015"></div><button class="btn-primary" id="find-article-btn">查找文章</button></div></div>
+                        <div id="cited-by-stage-2" style="display: none;"><div class="form-card"><h2>第二步：选择文章</h2><p class="form-description">请从以下最匹配的文章中选择一篇，以查看其详情。</p><div id="cited-by-article-candidates-container"></div><button class="btn-secondary" id="back-to-article-search">返回重新搜索</button></div></div>
+                    </div>
+                </main>
+                <div id="results-container"></div>
             </div>
-        </main>
-        
-        <div id="results-container"></div>
+        </div>
+        <footer>
+            <p>Powered by <a href="https://www.scopus.com" target="_blank" rel="noopener noreferrer">Scopus®</a> and <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a></p>
+            <p class="footer-copyright">外语教学编辑部 版权所有</p>
+        </footer>
     </div>
-    
-    <footer><p>Powered by <a href="https://www.scopus.com" target="_blank" rel="noopener noreferrer">Scopus®</a></p></footer>
-    
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <div id="article-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button class="modal-close-btn">×</button>
+            <div id="modal-body-content"></div>
+        </div>
+    </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+<!-- END OF FILE index.html -->
