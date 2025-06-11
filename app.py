@@ -1,275 +1,338 @@
-# app.py
+# --- START OF FILE app.py (FULL REPLACEMENT WITH AUTH SYSTEM) ---
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from flask_cors import CORS
 import requests
 from werkzeug.exceptions import HTTPException
-from collections import OrderedDict
 import logging
+import re
+import os
+import json
 
-# 初始化Flask应用
 app = Flask(__name__)
-CORS(app)  # 启用跨域支持
-
-# 配置日志记录
+# 警告：在生产环境中请务必使用更复杂且保密的密钥！
+app.secret_key = 'internal-testing-secret-key-2025888'
+CORS(app)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# API配置
-# ##################################################################
-# ▼▼▼ 请在此处输入您的 Scopus API Key ▼▼▼
-API_KEY = "75f3b08325f4a8511053a6f3cc2ac2d5"
-# ▲▲▲ 请在此处输入您的 Scopus API Key ▲▲▲
-# ##################################################################
-BASE_URL = "https://api.elsevier.com"
+# --- 用户认证配置 ---
+USERS_FILE = 'users.json'
+INVITATION_CODE = '2025888'
 
-# 核心外语期刊列表
-FOREIGN_LANGUAGE_JOURNALS = [
-    "Modern Language Journal", "Applied Linguistics", "Language Learning", "TESOL Quarterly",
-    "Foreign Language Annals", "Language Teaching Research", "System", "Journal of Second Language Writing"
-]
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'w') as f:
+            json.dump({}, f)
+        return {}
+    with open(USERS_FILE, 'r') as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return {}
 
-# 自定义异常类
+def save_user(email, password):
+    users = load_users()
+    # 警告：密码以明文形式存储，仅适用于内部测试。
+    users[email] = password
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=4)
+
+# --- 认证路由 ---
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        users = load_users()
+        if email in users and users[email] == password:
+            session['user_email'] = email
+            flash('登录成功！', 'success')
+            return redirect(url_for('welcome'))
+        else:
+            flash('邮箱或密码错误。', 'error')
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        invite_code = request.form.get('invite_code')
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        if invite_code != INVITATION_CODE:
+            flash('无效的邀请码。', 'error')
+            return redirect(url_for('register'))
+
+        users = load_users()
+        if email in users:
+            flash('该邮箱已被注册。', 'error')
+            return redirect(url_for('register'))
+
+        if not email or not password:
+            flash('邮箱和密码不能为空。', 'error')
+            return redirect(url_for('register'))
+
+        save_user(email, password)
+        session['user_email'] = email
+        flash('注册成功！', 'success')
+        return redirect(url_for('welcome'))
+    return render_template('register.html')
+
+# [FIX] Added the missing /logout route
+@app.route('/logout')
+def logout():
+    session.pop('user_email', None)
+    flash('您已成功登出。', 'success')
+    return redirect(url_for('login'))
+
+
+# --- 核心API和页面路由 ---
+
+SCOPUS_API_KEY = "da6f08ebbd87aba16ec3f2cb78f02d23"
+SCOPUS_BASE_URL = "https://api.elsevier.com"
+OPENALEX_BASE_URL = "https://api.openalex.org"
+OPENALEX_MAILTO = "library@your-institution.edu"
+
 class ApiException(Exception):
     def __init__(self, message, status_code=400):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
-# 错误处理
 @app.errorhandler(ApiException)
-def handle_api_exception(error):
-    return jsonify({"success": False, "error": error.message}), error.status_code
+def handle_api_exception(error): return jsonify({"success": False, "error": error.message}), error.status_code
 
 @app.errorhandler(Exception)
 def handle_generic_exception(error):
-    if isinstance(error, HTTPException):
-        return error
-    logging.error(f"发生未捕获的异常: {error}", exc_info=True)
+    if isinstance(error, HTTPException): return error
+    logging.error(f"发生未捕-捕获的异常: {error}", exc_info=True)
     return jsonify({"success": False, "error": f"服务器发生内部错误: {str(error)}"}), 500
 
-# Scopus API 请求函数
 def make_scopus_request(endpoint, params=None):
-    if params is None:
-        params = {}
-    
-    headers = {
-        'Accept': 'application/json',
-        'X-ELS-APIKey': API_KEY
-    }
-    
-    url = f"{BASE_URL}/{endpoint.lstrip('/')}"
-    
+    params = params or {}
+    headers = {'Accept': 'application/json', 'X-ELS-APIKey': SCOPUS_API_KEY}
+    url = f"{SCOPUS_BASE_URL}/{endpoint.lstrip('/')}"
     logging.info(f"向 Scopus 发送请求: URL={url}, Params={params}")
-    
     try:
         response = requests.get(url, params=params, headers=headers, timeout=40)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.HTTPError as e:
         status_code = e.response.status_code
-        try:
-            error_details = e.response.json().get('service-error', {}).get('status', {})
-            error_text = error_details.get('statusText', f"The requestor is not authorized to access the requested view or fields of the resource.")
-        except:
-            error_text = e.response.text
-        message = f"Scopus API 返回错误 (代码: {status_code})。详情: {error_text}"
-        logging.error(f"Scopus API HTTP 错误 ({status_code}): {error_text}")
+        message = f"Scopus API 请求失败 (代码: {status_code})。"
+        if status_code == 401: message = "API密钥权限不足。请尝试使用OpenAlex。"
+        elif status_code == 400: message = "API查询语法错误，请检查输入内容。"
+        else:
+            try: error_details = e.response.json(); error_text = error_details.get('service-error',{}).get('status',{}).get('statusText'); message += f" 详情: {error_text}" if error_text else ""
+            except: pass
+        logging.error(f"Scopus API HTTP 错误: {message}")
         raise ApiException(message, status_code)
     except requests.exceptions.RequestException as e:
-        logging.error(f"无法连接到 Scopus API: {e}")
-        raise ApiException("无法连接到 Scopus API。请检查网络连接。", 503)
+        raise ApiException("无法连接到 Scopus API。", 503)
 
-# 处理搜索结果
-def process_search_results(results):
-    articles = []
-    if not results:
-        return []
-        
+def make_openalex_request(endpoint, params=None):
+    params = params or {}
+    if OPENALEX_MAILTO: params['mailto'] = OPENALEX_MAILTO
+    headers = {'User-Agent': 'CitationAnalysisPlatform/1.7'}
+    url = f"{OPENALEX_BASE_URL}/{endpoint.lstrip('/')}"
+    logging.info(f"向 OpenAlex 发送请求: URL={url}, Params={params}")
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=40)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code
+        message = f"OpenAlex API 请求失败 (代码: {status_code})。"
+        try: error_details = e.response.json(); error_msg = error_details.get('message', str(error_details)); message += f" 详情: {error_msg}"
+        except: pass
+        logging.error(f"OpenAlex API HTTP 错误: {message}")
+        raise ApiException(message, status_code)
+    except requests.exceptions.RequestException as e:
+        raise ApiException("无法连接到 OpenAlex API。", 503)
+
+def reconstruct_abstract(inverted_index):
+    if not inverted_index: return "摘要不可用。"
+    try:
+        abstract_length = inverted_index['length']; index = inverted_index['index']; abstract_list = [''] * abstract_length
+        for word, positions in index.items():
+            for pos in positions: abstract_list[pos] = word
+        return ' '.join(filter(None, abstract_list))
+    except (TypeError, KeyError, IndexError): return "摘要解析失败。"
+
+def process_article_results(results, database):
+    return process_scopus_article_results(results) if database == 'scopus' else process_openalex_article_results(results)
+
+def process_scopus_article_results(results):
+    articles = [];
     for doc in results:
-        authors_list = doc.get('author', [])
-        author_names = ', '.join([author.get('authname', 'N/A') for author in authors_list])
-        
-        eid = doc.get('eid')
-        if not eid:
-            scopus_id = doc.get('dc:identifier', '').replace('SCOPUS_ID:', '')
-            if scopus_id.isdigit():
-                 eid = f'2-s2.0-{scopus_id}'
-        
-        # 关键修复：如果找不到有效的EID，则跳过此条目
-        if not eid:
-            logging.warning(f"无法为文章 '{doc.get('dc:title', 'N/A')}' 找到有效EID，已跳过。")
-            continue
-
-        articles.append({
-            "eid": eid,
-            "doi": doc.get('prism:doi'),
-            "title": doc.get('dc:title'),
-            "publicationName": doc.get('prism:publicationName'),
-            "coverDate": doc.get('prism:coverDate'),
-            "url": next((link['@href'] for link in doc.get('link', []) if link.get('@ref') == 'scopus'), '#'),
-            "authors": author_names
-        })
-    
+        eid = doc.get('eid', doc.get('dc:identifier', '').replace('SCOPUS_ID:', '2-s2.0-'));
+        if not eid.startswith('2-s2.0-'): continue
+        articles.append({"id": f"scopus:{eid}", "doi": doc.get('prism:doi'), "title": doc.get('dc:title'), "publicationName": doc.get('prism:publicationName'), "coverDate": doc.get('prism:coverDate'), "url": next((link['@href'] for link in doc.get('link', []) if link.get('@ref') == 'scopus'), '#'), "authors": ', '.join([a.get('authname', 'N/A') for a in doc.get('author', [])]), "citedby_count": int(doc.get('citedby-count', 0)), "abstract": doc.get('dc:description', '摘要不可用。')});
     return articles
 
-# 页面路由
+def process_openalex_article_results(results):
+    articles = [];
+    for doc in results:
+        articles.append({"id": doc.get('id', '').replace('https://openalex.org/', 'openalex:'), "doi": doc.get('doi', '').replace('https://doi.org/', '') if doc.get('doi') else None, "title": doc.get('display_name'), "publicationName": doc.get('primary_location', {}).get('source', {}).get('display_name') if doc.get('primary_location', {}).get('source') else 'N/A', "coverDate": doc.get('publication_date'), "url": doc.get('id', '#'), "authors": ', '.join([auth['author'].get('display_name', 'N/A') for auth in doc.get('authorships', [])]), "citedby_count": int(doc.get('cited_by_count', 0)), "abstract": reconstruct_abstract(doc.get('abstract_inverted_index'))});
+    return articles
+
+def process_author_results(results, database):
+    return process_scopus_author_results(results) if database == 'scopus' else process_openalex_author_results(results)
+
+def process_scopus_author_results(results):
+    authors = []
+    for author_data in results:
+        profile = author_data.get('author-profile', {}); coredata = author_data.get('coredata', author_data)
+        name_obj = coredata.get('preferred-name', {}); name = f"{name_obj.get('given-name', '')} {name_obj.get('surname', '')}".strip() or coredata.get('name') or coredata.get('authname')
+        author_id_raw = coredata.get('dc:identifier', 'AUTHOR_ID:').split(':')[-1] or coredata.get('authid')
+        affiliation_doc = (profile.get('affiliation-current', {}).get('affiliation', {}) or {}).get('ip-doc', {})
+        affiliation = affiliation_doc.get('afdispname') if affiliation_doc else 'N/A'
+        authors.append({"author_id": author_id_raw, "name": name, "orcid": coredata.get('orcid'), "affiliation": affiliation, "url": next((link['@href'] for link in coredata.get('link', []) if link.get('@ref') == 'self'), f"https://www.scopus.com/authid/detail.uri?authorId={author_id_raw}"), "cited_by_count": int(coredata.get('cited-by-count', 0)), "works_count": coredata.get('document-count', 'N/A'), "h_index": profile.get('h-index'), "i10_index": None, "x_concepts": "N/A", "country_code": "N/A", "cited_by_count_2yr": None, "works_year_range": "N/A"})
+    return authors
+
+def process_openalex_author_results(results):
+    authors = []
+    for author in results:
+        author_id_raw = author.get('id', 'https://openalex.org/A0').split('/')[-1]
+        concepts = [c.get('display_name') for c in author.get('x_concepts', [])[:2] if c.get('display_name')]
+        summary_stats = author.get('summary_stats', {})
+        last_known_institution = author.get('last_known_institution', {})
+        years = [item['year'] for item in author.get('counts_by_year', []) if item.get('year')]
+        year_range = f"{min(years)}–{max(years)}" if years else "N/A"
+        authors.append({"author_id": author_id_raw, "name": author.get('display_name'), "orcid": author.get('orcid', '').replace('https://orcid.org/', '') if author.get('orcid') else None, "affiliation": last_known_institution.get('display_name') if last_known_institution else 'N/A', "country_code": last_known_institution.get('country_code'), "url": author.get('id', '#'), "cited_by_count": int(author.get('cited_by_count', 0)), "works_count": author.get('works_count', 0), "h_index": summary_stats.get('h_index'), "i10_index": summary_stats.get('i10_index'), "cited_by_count_2yr": summary_stats.get('2yr_cited_by_count'), "works_year_range": year_range, "x_concepts": ', '.join(concepts) if concepts else '领域未知'})
+    return authors
+
+def run_paginated_query(database, query_builder_func, max_results=500):
+    all_articles = []; page_limit = 20
+    if database == 'scopus':
+        start_index, page_size = 0, 25
+        while len(all_articles) < max_results and page_limit > 0:
+            page_limit -= 1
+            params = {'query': query_builder_func(), 'start': start_index, 'count': page_size, 'view': 'STANDARD'}
+            response = make_scopus_request("content/search/scopus", params)
+            entries = response.get('search-results', {}).get('entry', [])
+            if not entries: break
+            all_articles.extend(process_article_results(entries, database))
+            total_results = int(response.get('search-results', {}).get('opensearch:totalResults', 0))
+            if len(all_articles) >= total_results or len(all_articles) >= 5000: break
+            start_index += page_size
+    elif database == 'openalex':
+        page, per_page = 1, 25
+        while len(all_articles) < max_results and page_limit > 0:
+            page_limit -= 1
+            params = query_builder_func()
+            params.update({'per-page': per_page, 'page': page})
+            response = make_openalex_request("works", params)
+            entries = response.get('results', [])
+            if not entries: break
+            all_articles.extend(process_article_results(entries, database))
+            total_results = response.get('meta', {}).get('count', 0)
+            if len(all_articles) >= total_results: break
+            page += 1
+    return all_articles[:max_results]
+
+# [FIX] Added protection to page routes
 @app.route('/')
-def index():
+def welcome():
+    if 'user_email' not in session:
+        return redirect(url_for('login'))
+    return render_template('welcome.html')
+
+@app.route('/tool')
+def tool():
+    if 'user_email' not in session:
+        return redirect(url_for('login'))
     return render_template('index.html')
 
-# API 端点 - 查教授引用
-@app.route('/api/find-author', methods=['POST'])
-def find_author_endpoint():
-    data = request.get_json()
-    last_name, first_name, affiliation = data.get('lastName', '').strip(), data.get('firstName', '').strip(), data.get('affiliation', '').strip()
-    
-    if not last_name:
-        raise ApiException("姓氏为必填项。")
-    
-    author_name_query = f'"{last_name}, {first_name}"' if first_name else f'"{last_name}"'
-    query = f'AUTHOR-NAME({author_name_query})'
-    
-    if affiliation:
-        query += f' AND AFFIL("{affiliation}")'
-    
-    response_json = make_scopus_request("content/search/scopus", {'query': query, 'count': 10, 'view': 'STANDARD'})
-    
-    authors = OrderedDict()
-    entries = response_json.get('search-results', {}).get('entry', [])
-    
-    if not entries:
-        raise ApiException(f"找不到与作者 '{last_name}, {first_name}' 相关的任何文章。")
-    
-    for article in entries:
-        current_affiliation = article.get('affiliation', [{}])[0].get('affilname', 'N/A')
-        for author in article.get('author', []):
-            auid = author.get('authid')
-            if auid and auid not in authors and last_name.lower() in author.get('authname', '').lower():
-                authors[auid] = {
-                    "eid": auid,
-                    "name": author.get('authname'),
-                    "affiliation": current_affiliation,
-                }
-    
-    return jsonify({"success": True, "authors": list(authors.values())[:10]})
+# [FIX] Added protection to API routes
+@app.route('/api/search-author-by-name', methods=['POST'])
+def search_author_by_name_endpoint():
+    if 'user_email' not in session: return jsonify({"success": False, "error": "Unauthorized"}), 401
+    data = request.get_json(); name = data.get('name', '').strip(); database = data.get('database', 'scopus')
+    if not name: raise ApiException("作者姓名是必填项。")
+    if database == 'scopus':
+        response = make_scopus_request("content/search/author", {'query': f'AUTHOR-NAME("{name}")', 'count': 25})
+    else: # openalex
+        response = make_openalex_request("authors", {'search': name, 'per-page': 25})
+    authors = process_author_results(response.get('results', []) or response.get('search-results', {}).get('entry', []), database)
+    return jsonify({"success": True, "authors": authors})
 
-@app.route('/api/analyze-professor-citations', methods=['POST'])
-def analyze_professor_citations_endpoint():
-    data = request.get_json()
-    author_id, start_year, end_year, target_journal = data.get('author_id'), data.get('start_year'), data.get('end_year'), data.get('target_journal', '').strip()
-    
-    if not all([author_id, start_year, end_year, target_journal]):
-        raise ApiException("缺少必要参数。")
-    
-    query = (
-        f'AU-ID({author_id}) '
-        f'AND PUBYEAR > {int(start_year) - 1} '
-        f'AND PUBYEAR < {int(end_year) + 1} '
-        f'AND REFSRCTITLE("{target_journal}")'
-    )
-    
-    response_json = make_scopus_request("content/search/scopus", {'query': query, 'count': 20, 'view': 'STANDARD'})
-    articles = process_search_results(response_json.get('search-results', {}).get('entry', []))
-    
-    return jsonify({"success": True, "count": len(articles), "articles": articles})
+@app.route('/api/get-author-by-orcid', methods=['POST'])
+def get_author_by_orcid_endpoint():
+    if 'user_email' not in session: return jsonify({"success": False, "error": "Unauthorized"}), 401
+    data = request.get_json(); orcid = data.get('orcid', '').strip(); database = data.get('database', 'scopus')
+    if not orcid: raise ApiException("ORCID 是必填项。")
+    if database == 'openalex':
+        response = make_openalex_request("authors", {'filter': f"orcid:{orcid}"})
+        author_details = process_openalex_author_results(response.get('results', []))[0] if response.get('results') else None
+        if not author_details: raise ApiException(f"在 OpenAlex 中未找到 ORCID 为 {orcid} 的作者。")
+    else: # Scopus
+        article_search_response = make_scopus_request("content/search/scopus", {'query': f'ORCID({orcid})', 'count': 1})
+        entries = article_search_response.get('search-results', {}).get('entry', [])
+        if not entries: raise ApiException(f"未找到与 ORCID {orcid} 关联的 Scopus 文章。")
+        found_author_in_article = next((a for a in entries[0].get('author', []) if a.get('orcid') == orcid), None)
+        if not found_author_in_article: raise ApiException("在文章中无法匹配到指定的 ORCID。")
+        author_id = found_author_in_article.get('authid')
+        if not author_id: raise ApiException("从文章中无法解析出作者 Scopus ID。")
+        author_profile_response = make_scopus_request(f"author/retrieve/{author_id}", {'view': 'METRICS'})
+        author_data = author_profile_response.get('author-retrieval-response', [])
+        if not author_data: raise ApiException(f"通过 AU-ID {author_id} 获取作者详情失败。")
+        author_details = process_scopus_author_results(author_data)[0]
+    return jsonify({"success": True, "author": author_details})
 
-# API 端点 - 查期刊互引
-@app.route('/api/search-journal-citations', methods=['POST'])
-def search_journal_citations_endpoint():
-    data = request.get_json()
-    source_journals_str, target_journal, start_year, end_year = data.get('source_journals', '').strip(), data.get('target_journal', '').strip(), data.get('start_year'), data.get('end_year')
-    
-    if not all([source_journals_str, target_journal, start_year, end_year]):
-        raise ApiException("所有字段均为必填项。")
-    
-    source_query = " OR ".join([f'SRCTITLE("{j.strip()}")' for j in source_journals_str.split(',') if j.strip()])
-    query = f'({source_query}) AND (REFSRCTITLE("{target_journal}")) AND PUBYEAR > {int(start_year) - 1} AND PUBYEAR < {int(end_year) + 1}'
-    
-    all_articles = []
-    start_index = 0
-    page_size = 25
-    max_results = 500
-
-    while len(all_articles) < max_results:
-        params = {'query': query, 'count': page_size, 'start': start_index, 'view': 'STANDARD'}
-        response_json = make_scopus_request("content/search/scopus", params)
-        results = response_json.get('search-results', {})
-        entries = results.get('entry', [])
-        if not entries: break
-        
-        all_articles.extend(process_search_results(entries))
-        
-        total_results = int(results.get('opensearch:totalResults', 0))
-        start_index += len(entries)
-        if start_index >= total_results or len(entries) < page_size: break
-
-    logging.info(f"期刊互引查询完成，共获取 {len(all_articles)} 条结果。")
-    return jsonify({"success": True, "count": len(all_articles), "articles": all_articles})
-
-# API 端点 - 查文章被引
-@app.route('/api/find-article', methods=['POST'])
-def find_article_endpoint():
-    data = request.get_json()
-    identifier = data.get('identifier', '').strip()
-    
-    if not identifier:
-        raise ApiException("请输入文章标题、DOI或EID。")
-    
-    # 关键修复：对于标题搜索，使用花括号 {} 来避免特殊字符问题
-    if '10.' in identifier and '/' in identifier:
-        query = f'DOI("{identifier}")'
-    elif identifier.startswith('2-s2.0-'):
-        query = f'EID("{identifier}")'
-    else:
-        # 使用 f-string 的双花括号来转义，最终生成 TITLE({identifier})
-        query = f'TITLE({{{identifier}}})'
-    
-    response_json = make_scopus_request("content/search/scopus", {'query': query, 'count': 10, 'view': 'STANDARD'})
-    articles = process_search_results(response_json.get('search-results', {}).get('entry', []))
-    
+@app.route('/api/get-author-works', methods=['POST'])
+def get_author_works_endpoint():
+    if 'user_email' not in session: return jsonify({"success": False, "error": "Unauthorized"}), 401
+    data = request.get_json(); author_id = data.get('author_id'); database = data.get('database', 'scopus')
+    if database == 'scopus':
+        response = make_scopus_request("content/search/scopus", {'query': f'AU-ID({author_id})', 'count': 25, 'view': 'STANDARD', 'sort': 'citedby-count'})
+    else: # openalex
+        response = make_openalex_request("works", {'filter': f'authorships.author.id:{author_id}', 'per-page': 25, 'sort': 'cited_by_count:desc'})
+    articles = process_article_results(response.get('results', []) or response.get('search-results', {}).get('entry', []), database)
     return jsonify({"success": True, "articles": articles})
 
-@app.route('/api/search-cited-by', methods=['POST'])
-def search_cited_by_endpoint():
-    data = request.get_json()
-    eid, start_year, end_year = data.get('eid'), data.get('start_year'), data.get('end_year')
+@app.route('/api/search-journal-citations', methods=['POST'])
+def search_journal_citations_endpoint():
+    if 'user_email' not in session: return jsonify({"success": False, "error": "Unauthorized"}), 401
+    data = request.get_json(); database = data.get('database', 'scopus')
+    if not all([data.get('source_journals', ''), data.get('target_journal', '')]): raise ApiException("源期刊和目标期刊均为必填项。")
     
-    # 关键修复：增加严格的EID验证，防止无效EID进入查询
-    if not eid or not isinstance(eid, str) or not eid.startswith('2-s2.0-'):
-        raise ApiException(f"提供的EID '{eid}' 无效或缺失。请重新查找并选择文章。")
-    
-    query_citing = f'REF(EID({eid})) AND PUBYEAR > {int(start_year) - 1} AND PUBYEAR < {int(end_year) + 1}'
+    def scopus_query_builder():
+        source_titles = [f'SRCTITLE("{title.strip()}")' for title in data['source_journals'].split(',') if title.strip()]
+        target_journal = f'REFSRCTITLE("{data["target_journal"].strip()}")'
+        return f"({ ' OR '.join(source_titles) }) AND {target_journal} AND PUBYEAR > {int(data['start_year']) - 1} AND PUBYEAR < {int(data['end_year']) + 1}"
 
-    all_citing_articles = []
-    start_index = 0
-    page_size = 25
-    max_results = 500
+    def openalex_query_builder():
+        source_journals_str = " OR ".join([f'"{name.strip()}"' for name in data['source_journals'].split(',') if name.strip()])
+        target_journal_str = f'"{data["target_journal"].strip()}"'
+        search_query = f'({source_journals_str}) AND ({target_journal_str})'
+        filters = [ f"publication_year:{data['start_year']}-{data['end_year']}" ]
+        return {'filter': ','.join(filters), 'search': search_query}
 
-    while len(all_citing_articles) < max_results:
-        params = {'query': query_citing, 'count': page_size, 'start': start_index, 'view': 'STANDARD'}
-        citing_data = make_scopus_request("content/search/scopus", params)
-        results = citing_data.get('search-results', {})
-        entries = results.get('entry', [])
-        if not entries: break
+    articles = run_paginated_query(database, scopus_query_builder if database == 'scopus' else openalex_query_builder)
+    return jsonify({"success": True, "count": len(articles), "articles": articles})
 
-        all_citing_articles.extend(process_search_results(entries))
-        
-        total_results = int(results.get('opensearch:totalResults', 0))
-        start_index += len(entries)
-        if start_index >= total_results or len(entries) < page_size: break
-
-    logging.info(f"被引文献查询完成，共获取 {len(all_citing_articles)} 条。")
-
-    filtered_citations = [
-        article for article in all_citing_articles
-        if article.get('publicationName') in FOREIGN_LANGUAGE_JOURNALS
-    ]
-    
-    return jsonify({
-        "success": True,
-        "total_citations": {"count": len(all_citing_articles), "articles": all_citing_articles},
-        "filtered_citations": {"count": len(filtered_citations), "articles": filtered_citations}
-    })
+@app.route('/api/find-article', methods=['POST'])
+def find_article_endpoint():
+    if 'user_email' not in session: return jsonify({"success": False, "error": "Unauthorized"}), 401
+    data = request.get_json(); identifier = data.get('identifier', '').strip(); database = data.get('database', 'scopus')
+    if not identifier: raise ApiException("请输入文章标识。")
+    doi_match = re.search(r'(10\.\d{4,9}/[-._;()/:A-Z0-9]+)', identifier, re.IGNORECASE)
+    if database == 'scopus':
+        query = f'DOI("{doi_match.group(1).rstrip(".,; ")}")' if doi_match else f'TITLE({{{identifier}}})'
+        response = make_scopus_request("content/search/scopus", {'query': query, 'count': 10, 'view': 'STANDARD'})
+    else: # openalex
+        params = {'per-page': 10}
+        if doi_match:
+             params['filter'] = f"doi:{doi_match.group(1).rstrip('.,; ')}"
+        else:
+             params['search'] = identifier
+        response = make_openalex_request("works", params=params)
+    articles = process_article_results(response.get('results', []) or response.get('search-results', {}).get('entry', []), database)
+    return jsonify({"success": True, "articles": articles})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
+# --- END OF FILE app.py ---
