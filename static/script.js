@@ -1,425 +1,103 @@
 document.addEventListener('DOMContentLoaded', () => {
-    let currentAuthorId = null, currentAuthorName = null, selectedArticle = null;
+    let currentDatabase = 'scopus';
+    let currentAuthor = null;
+    let currentAuthorCandidates = [];
+    let authorWorksCache = [];
+
     const resultsContainer = document.getElementById('results-container');
-    
-    // 获取DOM元素
-    const authorStage1 = document.getElementById('author-stage-1'), 
-          authorStage2 = document.getElementById('author-stage-2'), 
-          authorStage3 = document.getElementById('author-stage-3');
-          
-    const findAuthorBtn = document.getElementById('find-author-btn'), 
-          authorCandidatesContainer = document.getElementById('author-candidates-container'), 
-          analyzeProfCitationsBtn = document.getElementById('analyze-prof-citations-btn'), 
-          backToAuthorSearchBtn = document.getElementById('back-to-author-search');
-          
+    const dbSwitchRadios = document.querySelectorAll('input[name="database"]');
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    const authorStage1 = document.getElementById('author-stage-1');
+    const authorStage2 = document.getElementById('author-stage-2');
+    const authorStage3 = document.getElementById('author-stage-3');
+    const findAuthorByNameBtn = document.getElementById('find-author-by-name-btn');
+    const findAuthorByOrcidBtn = document.getElementById('find-author-by-orcid-btn');
+    const authorCandidatesContainer = document.getElementById('author-candidates-container');
+    const backToAuthorSearchBtn = document.getElementById('back-to-author-search');
+    const backToAuthorSearchFromCandidatesBtn = document.getElementById('back-to-author-search-from-candidates');
+    const authorWorksContainer = document.getElementById('author-works-container');
     const searchJournalCitationsBtn = document.getElementById('search-journal-citations-btn');
-    
-    const citedByStage1 = document.getElementById('cited-by-stage-1'), 
-          citedByStage2 = document.getElementById('cited-by-stage-2'), 
-          citedByStage3 = document.getElementById('cited-by-stage-3');
-          
-    const findArticleBtn = document.getElementById('find-article-btn'), 
-          articleCandidatesContainer = document.getElementById('article-candidates-container'), 
-          searchCitedByBtn = document.getElementById('search-cited-by-btn'), 
-          backToArticleSearchBtn = document.getElementById('back-to-article-search');
-    
-    // 初始化标签切换功能
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-            
-            button.classList.add('active');
-            document.getElementById(button.getAttribute('data-target')).classList.add('active');
-            
-            resultsContainer.innerHTML = ''; 
-            resetAuthorSearch(); 
-            resetArticleSearch();
-        });
-    });
-    
-    // 封装API请求
+    const fillCoreJournalsBtn = document.getElementById('fill-core-journals');
+    const citedByStage1 = document.getElementById('cited-by-stage-1');
+    const citedByStage2 = document.getElementById('cited-by-stage-2');
+    const findArticleBtn = document.getElementById('find-article-btn');
+    const citedByArticleCandidatesContainer = document.querySelector('#cited-by-pane #cited-by-article-candidates-container');
+    const backToArticleSearchBtn = document.querySelector('#cited-by-pane #back-to-article-search');
+    const modal = document.getElementById('article-modal');
+    const modalBody = document.getElementById('modal-body-content');
+    const modalCloseBtn = document.querySelector('.modal-close-btn');
+
+    const JOURNAL_CATEGORIES = {"CSSCI 来源期刊 (C刊)":{"defaultVisible":false,"subcategories":{"语言学类":[{"name":"当代语言学","scopusTitle":null},{"name":"外语教学与研究","scopusTitle":"Foreign Language Teaching and Research"},{"name":"现代外语","scopusTitle":"Modern Foreign Languages"},{"name":"外国语","scopusTitle":"Journal of Foreign Languages"},{"name":"世界汉语教学","scopusTitle":"Chinese Teaching in the World"},{"name":"语言科学","scopusTitle":"Linguistic Sciences"},{"name":"外语界","scopusTitle":"Foreign Language World"},{"name":"中国外语","scopusTitle":"Foreign Languages in China"},{"name":"外语教学","scopusTitle":"Foreign Language Education"},{"name":"语言教学与研究","scopusTitle":"Language Teaching and Linguistic Studies"},{"name":"外语与外语教学","scopusTitle":"Foreign Languages and Their Teaching"},{"name":"当代修辞学","scopusTitle":"Contemporary Rhetoric"},{"name":"外语电化教学","scopusTitle":"Technology Enhanced Foreign Language Education"},{"name":"外语教学理论与实践","scopusTitle":"Foreign Language Learning Theory and Practice"},{"name":"中国翻译","scopusTitle":"Chinese Translators Journal"},{"name":"上海翻译","scopusTitle":null},{"name":"民族语文","scopusTitle":"Minority Languages of China"},{"name":"方言","scopusTitle":null},{"name":"汉语学习","scopusTitle":"Chinese Language Learning"},{"name":"语文研究","scopusTitle":null},{"name":"汉语学报","scopusTitle":"Chinese Linguistics"},{"name":"语言战略研究","scopusTitle":"Journal of Language Policy and Language Planning"},{"name":"外语教育研究前沿","scopusTitle":"Frontiers of Foreign Language Education Research"}],"外国文学类":[{"name":"外国文学评论","scopusTitle":"Foreign Literature Review"},{"name":"外国文学研究","scopusTitle":"Foreign Literature Studies"},{"name":"外国文学","scopusTitle":"Foreign Literatures"},{"name":"当代外国文学","scopusTitle":"Contemporary Foreign Literature"},{"name":"俄罗斯文艺","scopusTitle":"Russian Literature and Arts"}]}},"CSSCI 扩展版来源期刊":{"defaultVisible":false,"subcategories":{"综合":[{"name":"外语学刊","scopusTitle":"Foreign Languages Research"},{"name":"解放军外国语学院学报","scopusTitle":"Journal of PLA University of Foreign Languages"},{"name":"外语研究","scopusTitle":"Foreign Language Research"},{"name":"当代外语研究","scopusTitle":"Contemporary Foreign Language Studies"},{"name":"西安外国语大学学报","scopusTitle":"Journal of Xi'an International Studies University"},{"name":"中国俄语教学","scopusTitle":null},{"name":"日语学习与研究","scopusTitle":"Japanese Language Learning and Research"},{"name":"语言与翻译","scopusTitle":"Language and Translation"},{"name":"华文教学与研究","scopusTitle":"TCSL Studies"},{"name":"古汉语研究","scopusTitle":"Research in Ancient Chinese Language"}]}},"北大核心期刊":{"defaultVisible":false,"subcategories":{"语言学与教学类":[{"name":"山东外语教学","scopusTitle":"Shandong Foreign Language Teaching"},{"name":"外国语文","scopusTitle":"Foreign Language and Literature"},{"name":"北京第二外国语学院学报","scopusTitle":"Journal of Beijing International Studies University"}],"文学与翻译类":[{"name":"译林","scopusTitle":"Yilin"},{"name":"名作欣赏","scopusTitle":null},{"name":"中国比较文学","scopusTitle":"Comparative Literature in China"}]}}};
+
     async function fetchAPI(endpoint, body) {
         showLoading();
-        
         try {
-            const response = await fetch(`http://localhost:5000${endpoint}`, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify(body) 
-            });
-            
+            const augmentedBody = { ...body, database: currentDatabase };
+            const response = await fetch(`/api${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(augmentedBody) });
             const data = await response.json();
-            
-            if (!response.ok || !data.success) {
-                throw new Error(data.error || `HTTP error! status: ${response.status}`);
-            }
-            
+            if (!response.ok || !data.success) { throw new Error(data.error || `HTTP error! status: ${response.status}`); }
             resultsContainer.innerHTML = '';
             return data;
-        } catch (error) {
-            console.error('API Fetch Error:', error);
-            showError(error.message);
-            return null;
-        }
+        } catch (error) { console.error('API Fetch Error:', error); showError(error.message); return null; }
     }
-    
-    // 重置作者搜索状态
-    function resetAuthorSearch() { 
-        currentAuthorId = null; 
-        currentAuthorName = null; 
-        authorStage1.style.display = 'block'; 
-        authorStage2.style.display = 'none'; 
-        authorStage3.style.display = 'none'; 
+
+    function handleDatabaseChange() {
+        currentDatabase = document.querySelector('input[name="database"]:checked').value;
+        const nameSearchSection = document.getElementById('author-search-by-name-section');
+        const orcidSearchSection = document.getElementById('author-search-by-orcid-section');
+        if (currentDatabase === 'scopus') {
+            nameSearchSection.classList.add('disabled-feature');
+            orcidSearchSection.classList.add('disabled-feature');
+        } else {
+            nameSearchSection.classList.remove('disabled-feature');
+            orcidSearchSection.classList.remove('disabled-feature');
+        }
+        resetAllPanes();
     }
-    
-    // 查找作者按钮点击事件
-    findAuthorBtn.addEventListener('click', async () => {
-        const lastName = document.getElementById('author-lastname').value.trim();
-        
-        if (!lastName) { 
-            showError("请输入教授的姓氏。"); 
-            return; 
-        }
-        
-        const data = await fetchAPI('/api/find-author', { 
-            lastName, 
-            firstName: document.getElementById('author-firstname').value.trim(), 
-            affiliation: document.getElementById('author-affiliation').value.trim() 
-        });
-        
-        if (data) { 
-            authorStage1.style.display = 'none'; 
-            authorStage2.style.display = 'block'; 
-            renderAuthorCandidates(data.authors); 
-        }
-    });
-    
-    // 返回搜索按钮点击事件
-    backToAuthorSearchBtn.addEventListener('click', () => { 
-        resetAuthorSearch(); 
-        resultsContainer.innerHTML = ''; 
-    });
-    
-    // 渲染作者候选列表
+
+    dbSwitchRadios.forEach(radio => radio.addEventListener('change', handleDatabaseChange));
+    tabButtons.forEach(button => { button.addEventListener('click', () => { tabButtons.forEach(btn => btn.classList.remove('active')); tabPanes.forEach(pane => pane.classList.remove('active')); button.classList.add('active'); document.getElementById(button.dataset.target).classList.add('active'); resetAllPanes(); }); });
+    findAuthorByNameBtn.addEventListener('click', async () => { const name = document.getElementById('author-search-query').value.trim(); if (!name) { showError("请输入作者姓名。"); return; } const data = await fetchAPI('/search-author-by-name', { name }); if (data && data.authors) { currentAuthorCandidates = data.authors; renderAuthorCandidates(data.authors); authorStage1.style.display = 'none'; authorStage2.style.display = 'block'; } });
+    findAuthorByOrcidBtn.addEventListener('click', async () => { const orcid = document.getElementById('author-orcid').value.trim(); if (!orcid) { showError("请输入ORCID。"); return; } const data = await fetchAPI('/get-author-by-orcid', { orcid }); if (data && data.author) { selectAuthor(data.author); } });
+    backToAuthorSearchBtn.addEventListener('click', resetAuthorSearch);
+    backToAuthorSearchFromCandidatesBtn.addEventListener('click', resetAuthorSearch);
+    searchJournalCitationsBtn.addEventListener('click', async () => { const sourceJournals = document.getElementById('source-journals').value.trim(); const targetJournal = document.getElementById('journal-target-journal').value.trim(); if (!sourceJournals || !targetJournal) { showError("源期刊和目标期刊均为必填项。"); return; } const startYear = document.getElementById('journal-start-year').value; const endYear = document.getElementById('journal-end-year').value; const data = await fetchAPI('/search-journal-citations', { source_journals: sourceJournals, target_journal: targetJournal, start_year: startYear, end_year: endYear }); if (data) renderSimpleResults(data, `在 ${startYear}-${endYear} 年间，源期刊共引用了 <strong>${targetJournal}</strong> ${data.count} 次。`, 'journal-citation'); });
+    findArticleBtn.addEventListener('click', async () => { const identifier = document.getElementById('article-identifier').value.trim(); if (!identifier) { showError("请输入文章标题或DOI。"); return; } const data = await fetchAPI('/find-article', { identifier }); if (data && data.articles) { authorWorksCache = data.articles; renderArticleCandidatesInPane(authorWorksCache); citedByStage1.style.display = 'none'; citedByStage2.style.display = 'block'; } });
+    if(backToArticleSearchBtn) backToArticleSearchBtn.addEventListener('click', resetArticleSearch);
+    modalCloseBtn.addEventListener('click', () => modal.style.display = 'none');
+    modal.addEventListener('click', (e) => { if (e.target === modal) { modal.style.display = 'none'; } });
+
+    function resetAuthorSearch() { currentAuthor = null; currentAuthorCandidates = []; authorWorksCache = []; authorStage1.style.display = 'block'; authorStage2.style.display = 'none'; authorStage3.style.display = 'none'; document.getElementById('author-search-query').value = ''; document.getElementById('author-orcid').value = ''; authorWorksContainer.innerHTML = ''; resultsContainer.innerHTML = ''; }
+    function resetArticleSearch() { authorWorksCache = []; citedByStage1.style.display = 'block'; citedByStage2.style.display = 'none'; if (citedByArticleCandidatesContainer) citedByArticleCandidatesContainer.innerHTML = ''; document.getElementById('article-identifier').value = ''; resultsContainer.innerHTML = ''; }
+    function resetAllPanes() { resultsContainer.innerHTML = ''; resetAuthorSearch(); resetArticleSearch(); document.getElementById('source-journals').value = ''; document.getElementById('journal-target-journal').value = ''; }
+
     function renderAuthorCandidates(authors) {
-        if (authors.length === 0) {
-            authorCandidatesContainer.innerHTML = `
-                <div class="info-message">未找到匹配的作者。</div>
-                <button class="btn-secondary" id="back-to-stage1-author">返回搜索</button>
-            `;
-            
-            document.getElementById('back-to-stage1-author').addEventListener('click', resetAuthorSearch); 
-            return;
-        }
-        
+        if (!authors.length) { authorCandidatesContainer.innerHTML = `<div class="info-message">未找到匹配的作者。</div>`; return; }
         authorCandidatesContainer.innerHTML = authors.map((author, index) => {
-            return `
-                <label class="author-choice" for="author-${index}">
-                    <input type="radio" id="author-${index}" name="author-candidate" value="${author.eid}" data-name="${author.name}">
-                    <div class="author-choice-content">
-                        <strong>${author.name}</strong>
-                        <div class="meta">${author.affiliation || '无当前机构信息'}</div>
-                    </div>
-                </label>`;
+            const orcidHtml = author.orcid ? `<a href="https://orcid.org/${author.orcid}" target="_blank" rel="noopener noreferrer">${author.orcid}</a>` : 'N/A';
+            const countryHtml = author.country_code && author.country_code !== 'N/A' ? `<span class="info-tag country">国家: ${author.country_code}</span>` : '';
+            const yearRangeHtml = author.works_year_range && author.works_year_range !== 'N/A' ? `<span class="info-tag year-range">学术生涯: ${author.works_year_range}</span>` : '';
+            const cited2yrHtml = author.cited_by_count_2yr !== null ? `<span class="info-tag cited-2yr">近2年被引: ${author.cited_by_count_2yr}</span>` : '';
+            return `<div class="author-card-selectable" data-index="${index}"> <div class="author-info"> <strong>${author.name || 'N/A'}</strong> <div class="meta institution">${author.affiliation || '最新机构: N/A'}</div> <div class="meta additional-info"> <span class="info-tag orcid">ORCID: ${orcidHtml}</span> ${countryHtml} <span class="info-tag concepts">领域: ${author.x_concepts || 'N/A'}</span> </div> <div class="meta additional-info stats"> <span class="info-tag works">作品: ${author.works_count ?? 'N/A'}</span> ${yearRangeHtml} <span class="info-tag h-index">H指数: ${author.h_index ?? 'N/A'}</span> <span class="info-tag i10-index">i10指数: ${author.i10_index ?? 'N/A'}</span> ${cited2yrHtml} </div> </div> <div class="citation-count"> <span>总被引</span> <strong>${author.cited_by_count || 0}</strong> </div> </div>`;
         }).join('');
-        
-        document.querySelectorAll('input[name="author-candidate"]').forEach(radio => {
-            radio.addEventListener('change', (event) => {
-                currentAuthorId = event.target.value; 
-                currentAuthorName = event.target.dataset.name;
-                document.getElementById('selected-author-name').textContent = currentAuthorName;
-                authorStage2.style.display = 'none'; 
-                authorStage3.style.display = 'block';
-            });
-        });
+        authorCandidatesContainer.querySelectorAll('.author-card-selectable').forEach(card => { card.addEventListener('click', (e) => { if (e.target.tagName === 'A') return; const selectedIndex = e.currentTarget.dataset.index; selectAuthor(currentAuthorCandidates[selectedIndex]); }); });
     }
     
-    // 分析教授引用按钮点击事件
-    analyzeProfCitationsBtn.addEventListener('click', async () => {
-        const targetJournal = document.getElementById('prof-target-journal').value.trim();
-        
-        if (!targetJournal) { 
-            showError("请输入目标期刊名称。"); 
-            return; 
-        }
-        
-        const startYear = document.getElementById('prof-start-year').value, 
-              endYear = document.getElementById('prof-end-year').value;
-              
-        const data = await fetchAPI('/api/analyze-professor-citations', { 
-            author_id: currentAuthorId, 
-            start_year: startYear, 
-            end_year: endYear, 
-            target_journal: targetJournal 
-        });
-        
-        if (data) {
-            renderSimpleResults(data, `在 ${startYear}-${endYear} 年间，${currentAuthorName} 发表的文章中引用了 <strong>${targetJournal}</strong> 共 <strong>${data.count}</strong> 次。`);
-        }
-    });
+    async function selectAuthor(author) { currentAuthor = author; authorStage1.style.display = 'none'; authorStage2.style.display = 'none'; authorStage3.style.display = 'block'; document.getElementById('selected-author-info-card').innerHTML = createAuthorInfoCard(author); authorWorksContainer.innerHTML = `<div class="loading-spinner" style="padding: 2rem 0;"></div>`; const worksData = await fetchAPI('/get-author-works', { author_id: author.author_id }); if (worksData && worksData.articles) { authorWorksCache = worksData.articles; renderAuthorWorks(authorWorksCache); } else { authorWorksContainer.innerHTML = `<div class="info-message">未能获取该作者的作品列表。</div>`; } }
+    function renderAuthorWorks(articles) { let html = `<h3>代表作 (按被引数排序)</h3>`; if (articles.length === 0) { html += `<p>无作品信息。</p>`; } else { html += articles.map((article, index) => `<div class="article-card-compact" data-index="${index}"> <div class="article-info"> <strong>${article.title}</strong> <p class="meta">${article.publicationName} (${article.coverDate?.substring(0, 4) || 'N/A'})</p> </div> <div class="citation-count-compact"> <span>被引</span> <strong>${article.citedby_count}</strong> </div> </div>`).join(''); } authorWorksContainer.innerHTML = html; authorWorksContainer.querySelectorAll('.article-card-compact').forEach(card => { card.addEventListener('click', () => { const article = authorWorksCache[card.dataset.index]; showArticleModal(article); }); }); }
+    function renderArticleCandidatesInPane(articles) { if (!citedByArticleCandidatesContainer) return; if (!articles.length) { citedByArticleCandidatesContainer.innerHTML = `<div class="info-message">未找到匹配的文章。</div>`; return; } citedByArticleCandidatesContainer.innerHTML = articles.map((article, index) => `<div class="article-card-selectable" data-index="${index}"> <div class="article-info"> <strong>${article.title || '无标题'}</strong> <div class="meta">${article.publicationName || 'N/A'} (${article.coverDate?.substring(0, 4) || 'N/A'})</div> </div> <div class="citation-count"> <span>总被引</span> <strong>${article.citedby_count}</strong> </div> </div>`).join(''); citedByArticleCandidatesContainer.querySelectorAll('.article-card-selectable').forEach(card => { card.addEventListener('click', () => { const selectedArticle = authorWorksCache[card.dataset.index]; showArticleModal(selectedArticle); }); }); }
+    function showArticleModal(article) { modalBody.innerHTML = renderArticleDetailHTML(article); modal.style.display = 'flex'; }
+    function renderArticleDetailHTML(article) { let citingUrl = '#'; if (currentDatabase === 'scopus' && article.url && article.url !== '#') { citingUrl = article.url.includes('/citedby/') ? article.url : article.url.replace('/full/','/citedby/'); } else if (currentDatabase === 'openalex' && article.id) { citingUrl = article.id.replace('openalex:', 'https://openalex.org/'); } return `<h2>文章详情</h2> <div class="detail-citation-count"> <span>总被引次数</span> <strong>${article.citedby_count}</strong> </div> <h3 class="detail-title">${article.title}</h3> <p class="meta"><strong>作者:</strong> ${article.authors}</p> <p class="meta"><strong>期刊:</strong> ${article.publicationName} (${article.coverDate?.substring(0, 4) || 'N/A'})</p> <p class="meta"><strong>DOI:</strong> ${article.doi ? `<a href="https://doi.org/${article.doi}" target="_blank">${article.doi}</a>` : 'N/A'}</p> <div class="abstract-box"> <h4>摘要</h4> <p>${article.abstract || '摘要不可用。'}</p> </div> <a href="${citingUrl}" target="_blank" rel="noopener noreferrer" class="btn-primary" style="margin-top: 1.5rem;">在 ${currentDatabase === 'scopus' ? 'Scopus' : 'OpenAlex'} 查看详情/施引文献</a>`; }
+    function renderSimpleResults(data, summaryText, searchType) { let backButtonHTML = `<button class="btn-secondary btn-back-to-form" data-search-type="${searchType}">返回重新检索</button>`; let html = `<div class="result-summary"><p>${summaryText}</p></div>`; if (data.count > 0 && data.articles) { html += data.articles.map(article => createArticleCard(article)).join(''); } else if (data.count === 0) { html += `<div class="info-message">没有找到符合条件的引用。</div>`; } resultsContainer.innerHTML = backButtonHTML + html; resultsContainer.style.opacity = 1; resultsContainer.querySelector('.btn-back-to-form').addEventListener('click', (e) => { const type = e.target.dataset.searchType; if (type === 'journal-citation') { document.getElementById('source-journals').value = ''; document.getElementById('journal-target-journal').value = ''; resultsContainer.innerHTML = ''; } else if (type === 'article-citation') { resetArticleSearch(); } }); }
+    function createAuthorInfoCard(author) { return `<div class="result-summary"> <p>已选定作者：<strong>${author.name}</strong></p> <p class="meta">最新机构: ${author.affiliation || 'N/A'} | <a href="${author.url}" target="_blank" rel="noopener noreferrer">查看主页</a></p> </div>`; }
+    function createArticleCard(article) { const hasLink = article.url && article.url !== '#'; const linkAttrs = hasLink ? `href="${article.url}" target="_blank" rel="noopener noreferrer"` : `href="#"`; const linkClass = hasLink ? 'view-original-link' : 'view-original-link disabled'; return `<div class="article-card"> <h4>${article.title || 'N/A'}</h4> <p class="meta">${article.publicationName || 'N/A'} (${article.coverDate?.substring(0, 4) || 'N/A'})</p> <p class="meta"> <a ${linkAttrs} class="${linkClass}">查看原文</a> </p> </div>`; }
+    function showLoading() { resultsContainer.innerHTML = `<div class="loading-spinner"><svg width="48" height="48" viewBox="0 0 24 24"><path fill="currentColor" d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/><path fill="currentColor" d="M10.72,19.9a8,8,0,0,1-6.5-9.79A7.77,7.77,0,0,1,10.4,4.16a8,8,0,0,1,9.49,6.52A1.54,1.54,0,0,0,21.38,12h.13a1.37,1.37,0,0,0,1.38-1.54,11,11,0,1,0-12.7,12.39A1.54,1.54,0,0,0,12,21.34h0A1.47,1.47,0,0,0,10.72,19.9Z"><animateTransform attributeName="transform" type="rotate" dur="0.75s" values="0 12 12;360 12 12" repeatCount="indefinite"/></path></svg></div>`; resultsContainer.style.opacity = 1; }
+    function showError(message) { resultsContainer.innerHTML = `<div class="error-message"><strong>错误:</strong> ${message}</div>`; resultsContainer.style.opacity = 1; }
+    function generateQuickAddHTML(categories) { let html = ''; for (const categoryName in categories) { const category = categories[categoryName]; html += `<div class="quick-add-category"><h4>${categoryName}</h4><div class="quick-add-buttons-wrapper hidden" data-category="${categoryName}">`; for (const subcategoryName in category.subcategories) { html += `<div class="subcategory-group"><p>${subcategoryName}</p><div class="quick-add-buttons">`; category.subcategories[subcategoryName].forEach(journal => { const isDisabled = !journal.scopusTitle; const titleAttr = isDisabled ? 'title="暂未被Scopus收录"' : ''; const journalData = isDisabled ? '' : `data-journal="${journal.scopusTitle}"`; html += `<button class="btn-quick-add" ${journalData} ${isDisabled ? 'disabled' : ''} ${titleAttr}>${journal.name}</button>`; }); html += `</div></div>`; } html += `</div><button class="btn-toggle-visibility" data-target="${categoryName}">展开</button></div>`; } return html; }
+    function addQuickAddEventListeners(container, inputElement, mode = 'append') { if (!container) return; container.querySelectorAll('.btn-quick-add').forEach(button => { button.addEventListener('click', () => { const journalToAdd = button.dataset.journal; if (!journalToAdd) return; if (mode === 'append') { const currentValue = inputElement.value.trim(); const currentValues = currentValue === '' ? [] : currentValue.split(',').map(s => s.trim()); if (!currentValues.includes(journalToAdd)) { currentValues.push(journalToAdd); inputElement.value = currentValues.join(', '); } } else { inputElement.value = journalToAdd; } }); }); container.querySelectorAll('.btn-toggle-visibility').forEach(button => { button.addEventListener('click', (e) => { const wrapper = e.currentTarget.previousElementSibling; const isHidden = wrapper.classList.toggle('hidden'); e.currentTarget.textContent = isHidden ? '展开' : '收起'; }); }); }
+    function initializeAllQuickAdd() { const quickAddHTML = generateQuickAddHTML(JOURNAL_CATEGORIES); const sourceContainer = document.getElementById('quick-add-container-source-journals'); const targetContainer = document.getElementById('quick-add-container-target-journal'); if (sourceContainer) { sourceContainer.innerHTML = quickAddHTML; addQuickAddEventListeners(sourceContainer, document.getElementById('source-journals'), 'append'); } if (targetContainer) { targetContainer.innerHTML = quickAddHTML; addQuickAddEventListeners(targetContainer, document.getElementById('journal-target-journal'), 'set'); } if (fillCoreJournalsBtn && sourceContainer) { fillCoreJournalsBtn.addEventListener('click', () => { const cJournals = new Set(); const cCat = JOURNAL_CATEGORIES['CSSCI 来源期刊 (C刊)']; if (cCat) { for (const subcategoryName in cCat.subcategories) { cCat.subcategories[subcategoryName].forEach(journal => { if (journal.scopusTitle) { cJournals.add(journal.scopusTitle); } }); } } document.getElementById('source-journals').value = Array.from(cJournals).join(', '); }); } }
     
-    // 检索期刊互引按钮点击事件
-    searchJournalCitationsBtn.addEventListener('click', async () => {
-        const sourceJournals = document.getElementById('source-journals').value.trim(), 
-              targetJournal = document.getElementById('journal-target-journal').value.trim();
-              
-        if (!sourceJournals || !targetJournal) { 
-            showError("源期刊和目标期刊均为必填项。"); 
-            return; 
-        }
-        
-        const startYear = document.getElementById('journal-start-year').value, 
-              endYear = document.getElementById('journal-end-year').value;
-              
-        const data = await fetchAPI('/api/search-journal-citations', { 
-            source_journals: sourceJournals, 
-            target_journal: targetJournal, 
-            start_year: startYear, 
-            end_year: endYear 
-        });
-        
-        if (data) {
-            renderSimpleResults(data, `在 ${startYear}-${endYear} 年间，源期刊共引用了 <strong>${targetJournal}</strong> ${data.count} 次。`);
-        }
-    });
-    
-    // 重置文章搜索状态
-    function resetArticleSearch() { 
-        selectedArticle = null; 
-        citedByStage1.style.display = 'block'; 
-        citedByStage2.style.display = 'none'; 
-        citedByStage3.style.display = 'none'; 
-    }
-    
-    // 查找文章按钮点击事件
-    findArticleBtn.addEventListener('click', async () => {
-        const identifier = document.getElementById('article-identifier').value.trim();
-        
-        if (!identifier) { 
-            showError("请输入文章标题、DOI或EID。"); 
-            return; 
-        }
-        
-        const data = await fetchAPI('/api/find-article', { identifier });
-        
-        if (data) { 
-            citedByStage1.style.display = 'none'; 
-            citedByStage2.style.display = 'block'; 
-            renderArticleCandidates(data.articles); 
-        }
-    });
-    
-    // 返回搜索按钮点击事件
-    backToArticleSearchBtn.addEventListener('click', () => { 
-        resetArticleSearch(); 
-        resultsContainer.innerHTML = ''; 
-    });
-    
-    // 渲染文章候选列表
-    function renderArticleCandidates(articles) {
-        if (articles.length === 0) {
-            articleCandidatesContainer.innerHTML = `
-                <div class="info-message">未找到匹配的文章。</div>
-                <button class="btn-secondary" id="back-to-stage1-article">返回搜索</button>
-            `;
-            
-            document.getElementById('back-to-stage1-article').addEventListener('click', resetArticleSearch); 
-            return;
-        }
-        
-        articleCandidatesContainer.innerHTML = articles.map((article, index) => {
-            const articleData = escape(JSON.stringify({ eid: article.eid, title: article.title }));
-            
-            return `
-                <label class="author-choice" for="article-${index}">
-                    <input type="radio" id="article-${index}" name="article-candidate" value="${articleData}">
-                    <div class="author-choice-content">
-                        <strong>${article.title || '无标题'}</strong>
-                        <div class="meta">${article.authors || '无作者信息'}</div>
-                        <div class="meta">${article.publicationName || '无期刊信息'} (${article.coverDate ? article.coverDate.substring(0, 4) : 'N/A'})</div>
-                        <div class="meta">DOI: ${article.doi || 'N/A'}</div>
-                    </div>
-                </label>`;
-        }).join('');
-        
-        document.querySelectorAll('input[name="article-candidate"]').forEach(radio => {
-            radio.addEventListener('change', (event) => {
-                selectedArticle = JSON.parse(unescape(event.target.value));
-                document.getElementById('selected-article-title').textContent = selectedArticle.title;
-                citedByStage2.style.display = 'none'; 
-                citedByStage3.style.display = 'block';
-            });
-        });
-    }
-    
-    // 搜索被引按钮点击事件
-    searchCitedByBtn.addEventListener('click', async () => {
-        if (!selectedArticle) { 
-            showError("请先选择一篇文章。"); 
-            return; 
-        }
-        
-        const startYear = document.getElementById('cited-start-year').value, 
-              endYear = document.getElementById('cited-end-year').value;
-              
-        const data = await fetchAPI('/api/search-cited-by', { 
-            eid: selectedArticle.eid, 
-            start_year: startYear, 
-            end_year: endYear 
-        });
-        
-        if (data) {
-            renderCitedByResults(data, startYear, endYear);
-        }
-    });
-    
-    // 简单结果显示
-    function renderSimpleResults(data, summaryText) {
-        let html = `<div class="result-summary"><p>${summaryText}</p></div>`;
-        
-        if (data.count > 0 && data.articles) {
-            html += data.articles.map(article => createArticleCard(article)).join('');
-        } else if (data.count === 0) {
-            html += `<div class="info-message">没有找到符合条件的引用。</div>`;
-        }
-        
-        resultsContainer.innerHTML = html;
-        resultsContainer.scrollIntoView({ behavior: 'smooth' });
-    }
-    
-    // 被引结果显示
-    function renderCitedByResults(data, startYear, endYear) {
-        let summaryHtml = `在 ${startYear}-${endYear} 年间，该文章总被引 <strong>${data.total_citations.count}</strong> 次。`;
-        summaryHtml += ` 其中，来自核心外语期刊的引用有 <strong>${data.filtered_citations.count}</strong> 次。`;
-        
-        let html = `<div class="result-summary">${summaryHtml}</div>`;
-        
-        if (data.total_citations.count > 0) {
-            html += `<div id="cited-by-chart-container" style="height: 250px;"><canvas id="citedByChart"></canvas></div>`;
-        }
-        
-        html += `<h3 style="margin-top: 2rem;">核心外语期刊施引文献 (${data.filtered_citations.count})</h3>`;
-        
-        if (data.filtered_citations.count > 0) {
-            html += data.filtered_citations.articles.map(article => createArticleCard(article)).join('');
-        } else {
-            html += '<div class="info-message">无指定来源的被引记录。</div>';
-        }
-        
-        html += `<h3 style="margin-top: 2rem;">全部施引文献 (${data.total_citations.count})</h3>`;
-        
-        if (data.total_citations.count > 0) {
-            html += data.total_citations.articles.map(article => createArticleCard(article)).join('');
-        } else {
-            html += '<div class="info-message">该时间范围内无被引记录。</div>';
-        }
-        
-        resultsContainer.innerHTML = html;
-        
-        if (data.total_citations.count > 0) {
-            renderChart(data.total_citations.count, data.filtered_citations.count);
-        }
-        
-        resultsContainer.scrollIntoView({ behavior: 'smooth' });
-    }
-    
-    // 图表渲染
-    function renderChart(total, filtered) {
-        const ctx = document.getElementById('citedByChart')?.getContext('2d');
-        
-        if (!ctx) return;
-        
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['被引次数'],
-                datasets: [
-                    { 
-                        label: '总被引', 
-                        data: [total], 
-                        backgroundColor: 'rgba(54, 162, 235, 0.6)', 
-                        borderColor: 'rgba(54, 162, 235, 1)', 
-                        borderWidth: 1 
-                    },
-                    { 
-                        label: '核心外语期刊被引', 
-                        data: [filtered], 
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)', 
-                        borderColor: 'rgba(75, 192, 192, 1)', 
-                        borderWidth: 1 
-                    }
-                ]
-            },
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                scales: { 
-                    y: { 
-                        beginAtZero: true, 
-                        ticks: { color: '#6D6F74', precision: 0 }, 
-                        grid: { color: 'rgba(0, 0, 0, 0.05)'} 
-                    }, 
-                    x: { 
-                        ticks: { color: '#6D6F74' }, 
-                        grid: { display: false } 
-                    } 
-                }, 
-                plugins: { 
-                    legend: { labels: { color: '#202123' } } 
-                } 
-            }
-        });
-    }
-    
-    // 创建文章卡片
-    function createArticleCard(article) {
-        const url = article.url || (article.doi ? `https://doi.org/${article.doi}`  : '#');
-        const link = url !== '#' ? `href="${url}" target="_blank" rel="noopener noreferrer"` : 'href="#" class="disabled-link"';
-        const coverYear = article.coverDate ? article.coverDate.substring(0, 4) : 'N/A';
-        
-        return `
-            <div class="article-card">
-                <h4 class="article-title">${article.title || '（标题不可用）'}</h4>
-                <p class="article-meta">${article.publicationName || 'N/A'} (${coverYear}) | <a ${link}>查看原文</a></p>
-            </div>`;
-    }
-    
-    // 显示加载动画
-    function showLoading() {
-        resultsContainer.innerHTML = `
-            <div class="loading-spinner">
-                <svg width="48" height="48" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#007BFF">
-                    <g>
-                        <circle cx="12" cy="3" r="1" fill-opacity="0.1">
-                            <animate id="a" begin="0;b.end-0.5s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="12" cy="21" r="1" fill-opacity="0.1">
-                            <animate begin="a.begin+0.1s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="20.5" cy="16.5" r="1" fill-opacity="0.1">
-                            <animate begin="a.begin+0.2s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="3.5" cy="7.5" r="1" fill-opacity="0.1">
-                            <animate begin="a.begin+0.3s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="20.5" cy="7.5" r="1" fill-opacity="0.1">
-                            <animate begin="a.begin+0.4s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                        <circle cx="3.5" cy="16.5" r="1" fill-opacity="0.1">
-                            <animate id="b" begin="a.begin+0.5s" attributeName="fill-opacity" calcMode="spline" dur="1.5s" values="0.1;1;0.1" keySplines=".5 0 .5 1;.5 0 .5 1" repeatCount="indefinite"/>
-                        </circle>
-                    </g>
-                </svg>
-                <p>正在请求 Scopus API，请稍候...</p>
-            </div>`;
-            
-        resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    
-    // 显示错误消息
-    function showError(message) {
-        resultsContainer.innerHTML = `<div class="error-message"><strong>错误:</strong> ${message}</div>`;
-        resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    initializeAllQuickAdd(); 
+    handleDatabaseChange();
 });
