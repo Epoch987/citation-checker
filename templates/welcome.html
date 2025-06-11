@@ -1,3 +1,5 @@
+<!-- START OF FILE welcome.html -->
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -6,49 +8,62 @@
     <title>欢迎 - 高级引文分析平台</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"> 
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+    <header class="page-header">
+        <span style="font-weight: 700;">欢迎, {{ session.user_email }}</span>
+        <a href="/logout" class="logout-link">登出</a>
+    </header>
     <div class="page-container">
-        <div class="browser-window">
-            <div class="browser-header-simple"></div>
-            <div class="welcome-container">
-                <div class="welcome-hero">
-                    <h1>高级引文分析平台</h1>
-                    <p>由 Scopus API 强力驱动，提供精准、高效的学术引文分析工具。</p>
-                    <a href="/tool" class="cta-button">开始使用分析工具 →</a>
-                </div>
-
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        </div>
-                        <h3>查教授引用</h3>
-                        <p>通过姓名或ID精确定位学者，分析其对目标期刊的引用情况。</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                        </div>
-                        <h3>查期刊互引</h3>
-                        <p>检索源期刊，查看其在指定年份内引用目标期刊的所有文章。</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                        </div>
-                        <h3>查文章被引</h3>
-                        <p>输入文章标识，分析其被引情况，并筛选来自核心期刊的引用。</p>
-                    </div>
+        <div class="welcome-grid">
+            <div class="welcome-hero">
+                <h1>高级引文分析平台</h1>
+                <p>由 Scopus & OpenAlex API 强力驱动，提供精准、高效的学术引文分析工具。</p>
+                <a href="/tool" class="cta-button">
+                    <span>开始使用分析工具</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                </a>
+            </div>
+            <div class="welcome-visual book-container">
+                <div class="book">
+                    <div class="book-cover"></div>
+                    <div class="book-pages-block"></div>
+                    <div class="page page-1"></div>
+                    <div class="page page-2"></div>
+                    <div class="page page-3"></div>
+                    <div class="page page-4"></div>
+                    <div class="page page-5"></div>
+                    <div class="page page-6"></div>
+                    <div class="book-cover-back"></div>
                 </div>
             </div>
         </div>
+
+        <div class="feature-grid-welcome">
+            <div class="feature-card">
+                <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+                <h3>查教授引用</h3>
+                <p>通过ID或姓名精确定位学者，分析其学术产出和影响力。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20c-1.1 0-2 .9-2 2h14v-2H8zM4 6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14v-2H4V6z"/></svg></div>
+                <h3>查期刊互引</h3>
+                <p>检索源期刊，查看其在指定年份内引用目标期刊的所有文章。</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></div>
+                <h3>查文章被引</h3>
+                <p>输入文章DOI或标题，快速获取该文章的详细信息和被引情况。</p>
+            </div>
+        </div>
+        
         <footer>
-            <p>Powered by <a href="https://www.scopus.com" target="_blank" rel="noopener noreferrer">Scopus®</a></p>
+            <p>Powered by <a href="https://www.scopus.com" target="_blank" rel="noopener noreferrer">Scopus®</a> and <a href="https://openalex.org" target="_blank" rel="noopener noreferrer">OpenAlex</a></p>
             <p class="footer-copyright">外语教学编辑部 版权所有</p>
         </footer>
     </div>
 </body>
 </html>
+<!-- END OF FILE welcome.html -->
