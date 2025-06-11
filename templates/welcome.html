@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>欢迎 - 高级引文分析平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"> 
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-container">
+        <div class="browser-window">
+            <div class="browser-header-simple"></div>
+            <div class="welcome-container">
+                <div class="welcome-hero">
+                    <h1>高级引文分析平台</h1>
+                    <p>由 Scopus API 强力驱动，提供精准、高效的学术引文分析工具。</p>
+                    <a href="/tool" class="cta-button">开始使用分析工具 →</a>
+                </div>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        </div>
+                        <h3>查教授引用</h3>
+                        <p>通过姓名或ID精确定位学者，分析其对目标期刊的引用情况。</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                        </div>
+                        <h3>查期刊互引</h3>
+                        <p>检索源期刊，查看其在指定年份内引用目标期刊的所有文章。</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                        </div>
+                        <h3>查文章被引</h3>
+                        <p>输入文章标识，分析其被引情况，并筛选来自核心期刊的引用。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <p>Powered by <a href="https://www.scopus.com" target="_blank" rel="noopener noreferrer">Scopus®</a></p>
+            <p class="footer-copyright">外语教学编辑部 版权所有</p>
+        </footer>
+    </div>
+</body>
+</html>
